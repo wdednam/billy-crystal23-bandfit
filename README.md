@@ -10,8 +10,6 @@ This fork focuses on:
 - A cleaner, reproducible layout suitable for an academic software release.
 - Additional band-structure fitting helpers used in the associated publication.
 
-> Status: repository is intended to be kept **private** until the paper is published.
-
 ## Quick start
 
 ## One-time setup (line endings + executable bits)
@@ -64,7 +62,7 @@ export PATH="$PWD:$PATH"
 
 ```bash
 cd examples/Al_POB_DZVP_rev2
-billy Al
+billy -f -n 3 -np 1 -cost ref.band.npy -wE 0.15 -lambda 0.01 -cap 0.55 -erange -10.0 10.0 Al 15
 ```
 
 ## Configuration
@@ -81,7 +79,6 @@ See `docs/configuration.md`.
 ## Releasing with your paper
 
 When you are ready to make the repository public:
-- Create a tag corresponding to the exact version used in the paper, e.g. `v1.0-paper`
 - (Optional) create a GitHub Release for that tag
 - Consider adding `CITATION.cff` once your paper DOI is known
 
