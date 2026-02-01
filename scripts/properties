@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ------------------------------------------------------------
+# properties — thin wrapper for CRYSTAL23 `runprop23`
+#
+# Allows workflows (including `billy`) to invoke:
+#   properties <root>      # expects <root>.d3 in CWD
+# or:
+#   cat <root>.d3 | properties
+#
+# Configuration:
+# - If CRY23_UTILS is set, `runprop23` is taken from there.
+# - Otherwise, `runprop23` must be on PATH.
+#
+# Parallelism:
+# - Use NPROC (default 1). This wrapper uses `mpirun` if NPROC>1,
+#   otherwise runs serially.
+# ------------------------------------------------------------
+
+set -euo pipefail
+
+# -------- locate the .d3 deck -----------------------------------------
+if [[ $# -gt 0 && -f "${1}.d3" ]]; then
+  root="$1"
+  deck="${root}.d3"
+else
+  deck="$(mktemp prop_XXXX.d3)"
+  cat > "$deck"
+  root="${deck%.d3}"
+fi
+
+# -------- resolve runprop23 --------------------------------------------
+if [[ -n "${CRY23_UTILS:-}" && -x "${CRY23_UTILS}/runprop23" ]]; then
+  runprop23="${CRY23_UTILS}/runprop23"
+else
+  runprop23="$(command -v runprop23 || true)"
+fi
+
+if [[ -z "${runprop23}" || ! -x "${runprop23}" ]]; then
+  echo "ERROR: cannot find executable 'runprop23'." >&2
+  echo "Hint: source CRYSTAL23's cry23.bashrc to set CRY23_UTILS, or put runprop23 on PATH." >&2
+  exit 2
+fi
+
+# -------- how many ranks? ----------------------------------------------
+np="${NPROC:-1}"
+
+# -------- run -----------------------------------------------------------
+# Always launch via mpirun (CRYSTAL23/runprop23 is often MPI-wrapper sensitive)
+mpirun -np "${np}" "${runprop23}" "${root}" "${root}"

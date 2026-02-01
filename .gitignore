@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# CRYSTAL / billy outputs
+*.f*
+fort.*
+*.d12o
+*.d3o
+*.out
+*.log
+*.opt
+*.opt_*
+*.w
+*.p3o
+*.xmgr
+*.ech3
+*.xyz
+*.symm
+prop_*.d3
+geom/
+
+# Misc
+.DS_Store
+Thumbs.db

@@ -1,0 +1,1627 @@
+#!/bin/csh -f
+#
+# This is an ancient relic which works well. It might be replaced by a modern 
+# bash script based on runqmc/runpwscf etc. when I have the time (MDT).
+#
+#
+#############################################################################
+#                                                                           #
+# A script to run CRYSTAL (95/98/03/06/09/14) (sequential+parallel version) #
+# ========================================================================= #
+#                                                                           #
+#                    Mike Towler (mdt26 at cam.ac.uk)                       #
+#                                                                           #
+#                      TCM Group, Cavendish Laboratory                      #
+#                          University of Cambridge                          #
+#                                                                           #
+#                    June 1993   This version: 11/1/14                      #
+#                                                                           #
+#                               CRYSTAL14                                   #
+#         Usage: runcrystal [-p] [-qmc] [-np <ncore>] <input filename>      #
+#                                                                           #
+#                               CRYSTAL09                                   #
+#      Usage: runcrystal [-p] [-09] [-qmc] [-np <ncore>] <input filename>   #
+#                                                                           #
+#                               CRYSTAL06                                   #
+#      Usage: runcrystal [-p] [-06] [-qmc] [-np <ncore>] <input filename>   #
+#                                                                           #
+#                               CRYSTAL03                                   #
+#      Usage: runcrystal [-p] [-03] [-qmc] [-np <ncore>] <input filename>   #
+#                                                                           #
+#                               CRYSTAL98                                   #
+#   Usage: runcrystal [-p] [-d] [-98] [-qmc] [-small/-big/-huge/-enormous]  #
+#                        <list of input filenames..>                        #
+#                                                                           #
+#                               CRYSTAL95                                   #
+#   Usage: runcrystal [-p] [-d] [-95] [-qmc] [-small/-big/-huge/-enormous]  #
+#                           <input filename>                                #
+#                                                                           #
+#                            Main features                                  #
+#                            -------------                                  #
+#                                                                           #
+# (1) Runs CRYSTAL14 by default - this may be overridden using the -95, -98 #
+#     -03, -06, -09 flags to run available CRYSTAL95/98/03/06/09 binaries.  #
+#     If you don't have CRYSTAL14, and want 95,98,03,06,09 permanently      #
+#     then set 'runcrystal' as an alias for 'runcrystal -09 ' or whatever.  #
+# (2) Default is to run the SCF program. Run the properties code using the  #
+#     -p flag.                                                              #
+# (3) All calculations done in scratch space predefined through the         #
+#     CRYSTAL_TMPDIR environment variable. Large files may be spread        #
+#     across multiple disks if bielectronic integral file splitting is      #
+#     turned on (define which disks at the top of this script).             #
+# (4) Can use binaries compiled on different machines stored in             #
+#     pre-defined locations, identified through an environment variable     #
+#     CRYSTAL_ARCH. Useful when multiple architectures access the same      #
+#     filespace.                                                            #
+# (5) Extensive error checking.                                             #
+#                                                                           #
+#                         Parallel features                                 #
+#                         -----------------                                 #
+# (1) The script has a certain amount of parallel support - for             #
+#     CRYSTAL03/06/09/14 and non-batch machines only. Just define a suitable#
+#     'mpirun' command in the environment variable section below. Note      #
+#     there is no need to rename your input file to be 'INPUT' - this       #
+#     script will do that for you.                                          #
+#                                                                           #
+#               Features relevant to CRYSTAL95 and 98 only                  #
+#               ------------------------------------------                  #
+#                                                                           #
+# (6) Blocks calculations if the version of CRYSTAL requested is older      #
+#     than newly introduced keywords in the input file.                     #
+# (7) Automatically runs properties code to compute total energy if it      #
+#     detects a DFT calculation (not necessary from C03).                   #
+# (8) Command line selection of normal or direct SCF. Default is to run a   #
+#     normal integrals/SCF calculation. The -d flag will turn on direct     #
+#     SCF mode (not necessary from C03).                                    #
+# (9) Handles MULTISCF stuff properly in CRYSTAL98. Requires list of all    #
+#     input deck names as arguments. If more than one valid filename        #
+#     appears in the list, it will run integrals once, then scf for         #
+#     each of the multiple inputs in the argument list. Note that the       #
+#     MULTISCF option need not be explicitly specified in the input.        #
+# (10) Dynamic memory allocation was only introduced in CRYSTAL2003. For    #
+#     C95/C98, the script allows up to five different binary sizes of each  #
+#     CRYSTALXX for standard/small/big/huge/enormous cases. Default is to   #
+#     standard: others may be selected with the -small/-big/-huge/-enormous #
+#     flags. These should point to CRYSTAL binaries compiled with different #
+#     values of the various LIM0xx parameters which define internal array   #
+#     sizes. I keep the small/std/big/huge cases fixed in size and increase #
+#     the enormous one whenever I run over some limit.                      #
+#                                                                           #
+#                Features relevant only to CASINO users                     #
+#                --------------------------------------                     #
+#                                                                           #
+# (11) The -qmc flag with -95/-98 will generate all the relevant input for  #
+#     the conversion utility included with the CASINO quantum Monte Carlo   #
+#     program (www.tcm.phy.cam.ac.uk/~mdt26/casino.html) i.e. the fort.10,  #
+#     fort.12 and fort.30 files, which will appear in your scratch          #
+#     directory disguised as 'silicon.f10' etc.. Type 'crysgen98' in that   #
+#     directory to perform the conversion. Note that you need to modify the #
+#     CRYSTAL95/98 source code to get it to do this. Follow the             #
+#     instructions provided with the CASINO distribution.                   #
+#                                                                           #
+# (12) Later versions of CRYSTAL03 will generate the QMC gwfn.data file     #
+#     directly by running the properties code. For periodic systems you     #
+#     have the option of producing various different cell sizes at once.    #
+#     If you specify the -qmc flag with runcrystal, then the script will ask#
+#     you what cell sizes to generate, then it will go ahead and run the    #
+#     SCF code then the properties code to create all the requested         #
+#     gwfn.data files. [NOTE : THIS WORKS WITH MDT's PRIVATE VERSION        #
+#     OF CRYSTAL03 ONLY - TORINO GROUP REFUSED TO ALLOW IT TO BE            #
+#     DISTRIBUTED.]                                                         #
+#                                                                           #
+# (13) CRYSTAL06/09/14 will generate GRED.DAT and KRED.DAT files containing #
+#     all necessary information if you input the CRYAPI_OUT keyword to      #
+#     the properties program. This is converted to CASINO gwfn.data         #
+#     format using the 'crysgen06/09/14' utilities. If you run this script  #
+#     (runcrystal) with the '-qmc' flag then the necessary properties input #
+#     file will automatically be created and run following completion       #
+#     of the SCF run. 'runcrystal' will then look for the 'crysgen06/09/14' #
+#     script and if it finds it will run it automatically. For periodic     #
+#     systems you have the option of producing gwfn.data for various        #
+#     different cell sizes at once. If you specify the -qmc flag the script #
+#     will therefore ask you what cell sizes to generate, then it will go   #
+#     ahead and run the SCF code then the properties code to create all the #
+#     requested gwfn.data files.                                            #
+#                                                                           #
+#                 Input and output for the SCF code                         #
+#                 ---------------------------------                         #
+#                                                                           #
+#  With an input file called 'silicon', this script will produce :          #
+#                                                                           #
+#  'silicon.o' - CRYSTAL output file                                        #
+#  'silicon.w' - CRYSTAL fort.9 wave function file required for properties  #
+#                computation.                                               #
+#                                                                           #
+#  Other files that may appear depending on options flagged in the input    #
+#  deck are:                                                                #
+#  'silicon.xyz'     - COORPRT                                              #
+#  'silicon.ext'     - EXTPRT                                               #
+#  'silicon.mol'     - MOLDRAW                                              #
+#  'silicon.g94'     - GAUSS94                                              #
+#  'silicon.knetout' - KNETOUT                                              #
+#  'silicon.info'    - INFO                                                 #
+#                                                                           #
+# CRYSTAL03/06/09/14 : files describing the optimized geometry from OPTCOORD#
+# stored in a separate geom directory, including the Hessian and restart    #
+# files necessary for HESGUESS/RESTART, and the xyz/ext/mol files giving    #
+# the optimized geometry.                                                   #
+#                                                                           #
+#             Input and output for the properties code                      #
+#             ----------------------------------------                      #
+#                                                                           #
+# Given standard input deck 'silicon', script assumes the existence of :    #
+# * silicon (for error checking)                                            #
+# * silicon.w (wave function file)                                          #
+# * silicon.p3 (properties input file containing BAND/DOSS/XFAC etc..)      #
+#                                                                           #
+# Standard output gets put into silicon.p3o. Depending on the options       #
+# flagged in the p3 file, you may also see some of the following.           #
+# silicon.in   (fort.25 - BAND/DOSS/LOCALWF/POTM etc..)                     #
+# silicon.xmgr (fort.24 - PROF/EMDL/DOSS)                                   #
+# silicon.f27  (fort.27 - POLARI/SPOLBP/SPOLWF)                             #
+# silicon.ech3 (fort.31 - ECH3)                                             #
+# silicon.xyz  (fort.33 - output of COORPRT)                                #
+# silicon.symm (fort.36 - from SYMMINFO, TOEMBE)                            #
+# silicon.f37  (fort.37 - from PIEZOWF)                                     #
+# silicon.lwf  (fort.81 - from LOCALWF)                                     #
+# silicon.mol  (fort.93 - from MOLDRAW)                                     #
+# silicon.ext  (fort.34 - from EXTPRT)                                      #
+# silicon.g94  (fort.92 - from GAUSS94)                                     #
+# silicon.fw   (fort.98 - formatted wave function from FMWF)                #
+#                                                                           #
+#############################################################################
+#                                                                           #
+# Define the following environment variables to make the script work in     #
+# your environment:                                                         #
+#                                                                           #
+#############################################################################
+#
+
+# This line defines the kind of computer you're working on, so that the
+# run script can use binaries compiled on different machines stored in
+# pre-defined locations. It is best to set CRYSTAL_ARCH as a permanent
+# environment variable e.g. by including the following line in your .cshrc
+# file (or if you use the bash shell, something like export CRYSTAL_ARCH="DEC"
+# in your .bashrc file).
+
+### setenv CRYSTAL_ARCH <your-arch>   # legacy; usually not needed for CRYSTAL23
+if (! $?CRYSTAL_ARCH) then
+  setenv CRYSTAL_ARCH Linux-ifort14_XE_emt64
+endif
+
+# Name of temporary directory on your scratch disk.
+# (temporary files will actually be put in a directory called something
+# like /temp/your_name/filename_1234
+
+#setenv CRYSTAL_TMPDIR "/tmp"
+#setenv CRYSTAL_TMPDIR "$HOME/CRY17_scratch"
+if (! $?CRYSTAL_TMPDIR) then
+  # Prefer CRYSTAL23 scratch if available
+  if ( $?CRY23_SCRDIR ) then
+    setenv CRYSTAL_TMPDIR "$CRY23_SCRDIR"
+  else
+    setenv CRYSTAL_TMPDIR "$HOME/CRY23_scratch"
+  endif
+endif
+
+if (! $?CRYSTAL_TMPDIR) then
+ echo "You need to set an environment variable CRYSTAL_TMPDIR so that"
+ echo "CRYSTAL knows where to store its temporary files."
+ echo "e.g. 'setenv CRYSTAL_TMPDIR /temp/$user' in your .cshrc file "
+ echo "for (t)csh shells."
+ exit
+endif
+set TMP1 = $CRYSTAL_TMPDIR
+
+# If you only have small scratch disks and you want to spread the
+# bielectronic file over several disks then define up to three more
+# different scratch directories on different disks below and activate the
+# BIESPLIT option in the CRYSTAL input deck.
+#
+# If you don't want to use this option then the extra directories should be
+# given the same name as TMP1
+
+set TMP2 = $CRYSTAL_TMPDIR
+set TMP3 = $CRYSTAL_TMPDIR
+set TMP4 = $CRYSTAL_TMPDIR
+
+# Directories containing CRYSTAL binaries of different sizes, defined with
+# respect to a directory 'BASE':
+
+if ($?CRYSTAL_ARCH) then
+# If you're in the Cambridge TCM group, change this to ~mdt26/x/$CRYSTAL_ARCH
+ set BASE = ~/x/$CRYSTAL_ARCH
+else
+ set BASE = ~/x
+endif
+
+# CRYSTAL95
+set BINENORMOUS95  = $BASE/enormous
+set BINHUGE95      = $BASE/huge
+set BINBIG95       = $BASE/big
+set BINSTD95       = $BASE/std
+set BINSMALL95     = $BASE/small
+
+# CRYSTAL98
+set BINENORMOUS98  = $BASE/enormous
+set BINHUGE98      = $BASE/huge
+set BINBIG98       = $BASE/big
+set BINSTD98       = $BASE/std
+set BINSMALL98     = $BASE/small
+
+# CRYSTAL03 (define this yourself)
+#set BIN03       = $BASE/03/v1.03
+set BIN03       = $BASE/03/dev
+
+# CRYSTAL06 (define this yourself)
+set BIN06        = $BASE/06/v1_0_2
+
+# CRYSTAL09 (define this yourself)
+set BIN09        = $BASE/09/v1_0_1
+
+# CRYSTAL14 (define this yourself)
+## CRYSTAL14/23 default (we treat this as the "default CRYSTAL" branch):
+# For CRYSTAL23, prefer CRY23_EXEDIR (from cry23.bashrc).
+if ( $?CRY23_EXEDIR ) then
+  set BIN14 = "$CRY23_EXEDIR"
+else
+  # Fallback: edit this path if you are not using CRY23_EXEDIR
+  set BIN14 = "$BASE/14/v1.0.1"
+endif
+
+#set BIN14        = /opt/CRYSTAL14/bin/Linux-ifort/v1.0.4
+#set BIN14        = $HOME/CRYSTAL17/bin/Linux-ifort14_XE_emt64/std
+# --- CRYSTAL23 exec-dir normalization (MINIMAL) --------------------------
+if ( -x "$BIN14/std/Pcrystal" && ! -x "$BIN14/Pcrystal" ) set BIN14 = "$BIN14/std"
+if ( ! -x "$BIN14/Pcrystal" ) then
+  echo "Cannot access CRYSTAL23 executable. Check Pcrystal in $BIN14"
+  exit 2
+endif
+# ------------------------------------------------------------------------
+#set BIN14        = /opt/CRYSTAL14/utils14
+
+# names of CRYSTAL binaries on your machine
+
+# CRYSTAL95
+set c95_integrals     = x1_95
+set c95_scf           = x2_95
+set c95_properties    = x3_95
+set c95_direct        = xd_95
+
+# CRYSTAL95-QMC
+set c95qmc_integrals  = x1q_95
+set c95qmc_scf        = x2q_95
+set c95qmc_properties = x3q_95
+set c95qmc_direct     = xdq_95
+
+# CRYSTAL98
+set c98_integrals     = x1
+set c98_scf           = x2
+set c98_properties    = x3
+set c98_direct        = xd
+
+# CRYSTAL98-QMC
+set c98qmc_integrals  = x1q
+set c98qmc_scf        = x2q
+set c98qmc_properties = x3q
+set c98qmc_direct     = xdq
+
+# CRYSTAL03
+set c03_crystal       = crystal
+set c03_properties    = properties
+
+# CRYSTAL06
+set c06_crystal       = crystal
+set c06_properties    = properties
+
+# CRYSTAL09
+set c09_crystal       = crystal
+set c09_properties    = properties
+
+# CRYSTAL09
+set c14_crystal       = crystal
+set c14_properties    = properties
+
+# PARALLEL CRYSTAL (03/06/09)
+#
+# do this later, once we know $input_file we can search for MPP
+# set pcrystal         = Pcrystal
+# set pcrystal         = MPPcrystal
+#
+
+# nice setting with which large jobs are run on your system
+
+set niceval = +15
+
+# This script assumes that the temporary fortran files produced by CRYSTAL
+# are called things like fort.9, fort.44 etc.
+# On some machines, they may be called ftn09, ftn44 or something.
+# If this is the case, you can change the default names here:
+
+set fort1  = fort.1
+set fort8  = fort.8
+set fort9  = fort.9
+set fort10 = fort.10
+set fort12 = fort.12
+set fort18 = fort.18
+set fort20 = fort.20
+set fort24 = fort.24
+set fort25 = fort.25
+set fort27 = fort.27
+set fort28 = fort.28
+set fort29 = fort.29
+set fort30 = fort.30
+set fort31 = fort.31
+set fort32 = fort.32
+set fort33 = fort.33
+set fort34 = fort.34
+set fort36 = fort.36
+set fort37 = fort.37
+set fort38 = fort.38
+set fort39 = fort.39
+set fort44 = fort.44
+set fort45 = fort.45
+set fort46 = fort.46
+set fort47 = fort.47
+set fort55 = fort.55
+set fort56 = fort.56
+set fort57 = fort.57
+set fort58 = fort.58
+set fort66 = fort.66
+set fort68 = fort.68
+set fort80 = fort.80
+set fort81 = fort.81
+set fort92 = fort.92
+set fort93 = fort.93
+set fort96 = fort.96
+set fort98 = fort.98
+
+# Command to run CRYSTAL on a parallel machine of followed by a number 
+# indicating the number of cores.
+ setenv PARALLEL "mpirun -np "
+# setenv PARALLEL "mpiexec -np "
+# setenv PARALLEL "prun -p quickpart -n "
+
+# prun always tries to open standard input even if not required (as x2).
+# Therefore need to redirect input or it will lock up if you run it in the
+# background (!).
+
+ setenv INPUT_REDIRECT ""
+# setenv INPUT_REDIRECT " < /dev/null "
+
+endif
+
+#
+# END OF ENVIRONMENT VARIABLES DEFINITION.
+# You should not need to change the file below here.
+#
+#############################################################################
+
+set WDIR = `pwd`
+#set MACHINE = `hostname -s`
+set MACHINE = `hostname`
+set DATE = `date`
+unset noclobber
+
+#
+# parse the argument list
+#
+
+# first the optional flag
+
+while ( $#argv > 0 )
+ switch ( $argv[1] )
+ case -d:
+  set direct ; shift ; breaksw
+ case -p:
+  set properties ; shift ; breaksw
+ case -95:
+  set use95 ; shift ; breaksw
+ case -98:
+  set use98 ; shift ; breaksw
+ case -03:
+  set use03 ; shift ; breaksw
+ case -06:
+  set use06 ; shift ; breaksw
+ case -09:
+  set use09 ; shift ; breaksw
+ case -np:
+  shift; set ncore=$argv[1] ; if ($ncore >1) set isparallel ; shift ; breaksw
+ case -small:
+  set small ; shift ; breaksw
+ case -big:
+  set big ; shift ; breaksw
+ case -huge:
+  set huge ; shift ; breaksw
+ case -enormous:
+  set enormous ; shift ; breaksw
+ case -qmc:
+  set qmc ; shift ; breaksw
+ case -*:
+  echo "Illegal flag $argv[1]"
+  echo "Usage: runcrystal [-p] [-d] [-small/-big/-huge/-enormous] [-95/-98/-03/-06/-09] [-qmc] [-np <ncore>] <list of input files>"
+  exit 1
+ default:
+  break
+ endsw
+end
+
+if ($?isparallel) then 
+ if ($?use95 || $?use98) then
+  echo " "
+  echo "Parallel calculations only supported with CRYSTAL03/06/09/14."
+  echo " "
+  exit
+ endif
+ if !($ncore > 0 && $ncore < 9999999) then
+  echo " "
+  echo "Invalid value for number of cores (-np)."
+  echo " "
+  exit
+ endif
+else
+ set PARALLEL = ""
+ set INPUT_REDIRECT = ""
+ set ncore = ""
+endif
+
+if ($?use95 && $?use98) then
+ echo " "
+ echo "Please specify only one of the -95 and -98 flags."
+ echo " "
+ exit
+endif
+
+if ($?use95 && $?use03) then
+ echo " "
+ echo "Please specify only one of the -95 and -03 flags."
+ echo " "
+ exit
+endif
+
+if ($?use95 && $?use06) then
+ echo " "
+ echo "Please specify only one of the -95 and -06 flags."
+ echo " "
+ exit
+endif
+
+if ($?use95 && $?use09) then
+ echo " "
+ echo "Please specify only one of the -95 and -09 flags."
+ echo " "
+ exit
+endif
+
+if ($?use98 && $?use03) then
+ echo " "
+ echo "Please specify only one of the -98 and -03 flags."
+ echo " "
+ exit
+endif
+
+if ($?use98 && $?use06) then
+ echo " "
+ echo "Please specify only one of the -98 and -06 flags."
+ echo " "
+ exit
+endif
+
+if ($?use98 && $?use09) then
+ echo " "
+ echo "Please specify only one of the -98 and -09 flags."
+ echo " "
+ exit
+endif
+
+if ($?use03 && $?use06) then
+ echo " "
+ echo "Please specify only one of the -03 and -06 flags."
+ echo " "
+ exit
+endif
+
+if ($?use03 && $?use09) then
+ echo " "
+ echo "Please specify only one of the -03 and -09 flags."
+ echo " "
+ exit
+endif
+
+if ($?use06 && $?use09) then
+ echo " "
+ echo "Please specify only one of the -06 and -09 flags."
+ echo " "
+ exit
+endif
+
+if (! $?use95 && ! $?use98 && ! $?use03 && ! $?use06 && ! $?use09 ) set use14
+
+if ( $?use03 || $?use06 || $?use09 || $?use14 ) then
+
+ if ($?small || $?big || $?huge || $?enormous ) then
+  echo " "
+  echo "From 2003 onwards, CRYSTAL uses dynamic memory allocation and it is not"
+  echo "necessary to have a collection of differently sized binaries as was"
+  echo "the case with previous versions of the code. You must specify the -95"
+  echo "or -98 flags if you wish to use -small/-big/-huge/-enormous options."
+  echo " "
+  exit
+ endif
+
+else
+
+#  Moron proofing
+
+ if ( $?small && $?big ) then
+  echo "The -small and -big options are incompatible."
+  exit
+ endif
+
+ if ( $?small && $?huge ) then
+  echo "The -small and -huge options are incompatible."
+  exit
+ endif
+
+ if ( $?small && $?enormous ) then
+  echo "The -small and -enormous options are incompatible."
+  exit
+ endif
+
+ if ( $?big && $?enormous ) then
+  echo "The -big and -enormous options are incompatible."
+  exit
+ endif
+
+ if ( $?big && $?huge ) then
+  echo "The -big and -huge options are incompatible."
+  exit
+ endif
+
+ if ( $?enormous && $?huge ) then
+  echo "The -enormous and -huge options are incompatible."
+  exit
+ endif
+
+endif
+
+
+#
+
+if ( $#argv == 0 ) then
+ echo "Usage: runcrystal [-p] [-d] [-small/-big/-huge/-enormous] [-95/-98/-03/-06/-09] [-qmc] [-np <ncore>] <list of input file names.>"
+ exit
+endif
+
+
+set input_file = $argv[1]
+if ( ! -e $input_file) then
+ echo "The CRYSTAL input deck '$input_file' does not exist."
+ exit
+endif
+
+#if (`grep -c "" $input_file` > 0) then
+#
+# if (`which dos2unix | grep -c "Command not found"` > 0 ) then
+#  echo "Your CRYSTAL input deck contains Windows control characters."
+#  echo "Tried to remove them but dos2unix does not appear to exist on your system."
+#  exit
+# endif
+#
+# dos2unix -k $input_file >& /dev/null
+#
+#endif
+
+# Set parallel binary
+if ($?isparallel) then 
+ if (`grep -c "MPP" $input_file` > 0) then
+  set pcrystal         = MPPcrystal
+ else
+  set pcrystal         = Pcrystal
+ endif
+endif
+
+set nruns = $#argv
+if ( $nruns > 1 ) then
+
+ if ($?use98) then
+
+  set multiscf
+  if ($?direct) then
+   echo "You have selected direct mode but you apparently want to use the MULTISCF feature."
+   echo "Bad idea."
+   exit
+  endif
+  if ($nruns > 1 ) then
+   set x = 2
+   while ($x <= $nruns)
+    if ( ! -e $argv[$x]) then
+     echo "The CRYSTAL input deck '$argv[$x]' does not exist."
+     exit
+    endif
+    set dim = `awk 'NR==2 {print $1}' $argv[$x]`
+    if ($dim == MOLECULE || $dim == POLYMER || $dim == SLAB || $dim == CRYSTAL || $dim == EXTERNAL) then
+     echo ""
+     echo "Problem with MULTISCF for input deck $argv[$x] :"
+     echo "Input files after first should only contain SCF input i.e. all the"
+     echo "lines after and including the specification of IS, ISHF, ISP"
+     echo "(k space sampling density)."
+     echo ""
+     exit
+    endif
+    @ x++
+   end
+  endif
+
+ else
+
+  echo " "
+  echo "Multiple input files apparently requested."
+  echo " "
+  echo "MultiSCF calculations may only be done with CRYSTAL98. Use the -98 flag"
+  echo "if this is really what you intend."
+  echo " "
+  exit
+
+ endif
+
+else
+
+ if ($#argv != 1) then
+  echo "Usage: runcrystal [-p] -d] [-small/-big/-huge/-enormous] [-95/-98/-03/-06/-09] [-qmc] [-np <ncore>] <list of input file names..>"
+  exit
+ endif
+
+endif
+
+if ($?qmc && ($?use03 || $?use06 || $?use09 || $?use14) ) then
+ if ($?use03) set BIN03 = $BASE/03/dev
+ set dim = `awk 'NR==2 {print $1}' $input_file`
+ if ($dim != MOLECULE) then
+  echo "Number of different QMC supercell sizes to calculate? (Maximum 5)"
+  set ncell = ($<)
+  if ($ncell != 1 && $ncell != 2 && $ncell != 3 && $ncell != 4 && $ncell != 5) then
+   echo "Invalid answer."
+   exit
+  endif
+ else
+  set ncell = 1
+ endif
+ if (-e $input_file.qmc) rm $input_file.qmc
+ echo 'NEWK' > $input_file.qmc
+ if ($dim != MOLECULE) then
+  if ($?use03) then
+   echo '0 0 0' >> $input_file.qmc
+  else
+   echo '0 0' >> $input_file.qmc
+  endif
+ endif
+ echo '1 0' >> $input_file.qmc
+
+ if ($?use03) then
+# CRYSTAL03
+
+  echo "QMC" >> $input_file.qmc
+  if ($dim != MOLECULE) then
+   echo $ncell >> $input_file.qmc
+   set a = 1
+   while ( $a <= $ncell )
+jump:
+    echo "Size of cell "$a"? (e.g. 2 2 2)"
+    set cellsize = ($<)
+    if ($#cellsize != 3) then
+     echo "Input three integers."
+     echo " "
+     goto jump
+    endif
+    expr $cellsize[1] + $cellsize[2] + $cellsize[3] >& /dev/null
+    if ($status != 0) then
+     echo "Input three integers"
+     echo " "
+     goto jump
+    endif
+    echo $cellsize >> $input_file.qmc
+    @ a++
+   end
+   echo " "
+   echo "Put the script in the background with 'Ctrl-Z' then 'bg'."
+   echo " "
+  endif
+  echo "END" >> $input_file.qmc
+  echo "END" >> $input_file.qmc
+
+ else
+# CRYSTAL06/09/14
+
+  echo "CRYAPI_OUT" >> $input_file.qmc
+  echo "END" >> $input_file.qmc
+  echo "END" >> $input_file.qmc
+  touch crysgen.dat
+  echo "QMC" >> crysgen.dat
+  if ($dim != MOLECULE) then
+   echo $ncell >> crysgen.dat
+   set a = 1
+   while ( $a <= $ncell )
+jump2:
+    echo "Size of cell "$a"? (e.g. 2 2 2)"
+    set cellsize = ($<)
+    if ($#cellsize != 3) then
+     echo "Input three integers"
+     echo " "
+     goto jump2
+    endif
+    expr $cellsize[1] + $cellsize[2] + $cellsize[3] >& /dev/null
+    if ($status != 0) then
+     echo "Input three integers"
+     echo " "
+     goto jump2
+    endif
+    echo $cellsize >> crysgen.dat
+    @ a++
+   end
+   echo " "
+   echo "Put the script in the background with 'Ctrl-Z' then 'bg'."
+   echo " "
+  endif
+  echo "END" >> crysgen.dat
+
+  if ($?use06) then
+   if (! -X crysgen06) then
+    echo "The crysgen06 program does not appear to be in your path."
+    echo "Please make sure it is before running CRYSTAL06 with the -qmc option."
+    exit
+   endif
+  else if ($?use09) then
+   if (! -X crysgen09) then
+    echo "The crysgen09 program does not appear to be in your path."
+    echo "Please make sure it is before running CRYSTAL09 with the -qmc option."
+    exit
+   endif
+  else
+   if (! -X crysgen14) then
+    echo "The crysgen14 program does not appear to be in your path."
+    echo "Please make sure it is before running CRYSTAL14 with the -qmc option."
+    exit
+   endif
+  endif
+
+ endif
+endif
+
+# scratch directories
+set TMPDIR1 = $TMP1/$1_$$
+set TMPDIR2 = $TMP2/$1_$$
+set TMPDIR3 = $TMP3/$1_$$
+set TMPDIR4 = $TMP4/$1_$$
+
+# Which binaries do we use?
+
+set dim = `awk 'NR==2 {print $1}' $input_file`
+if ($dim == MOLECULE || $dim == POLYMER || $dim == SLAB || $dim == CRYSTAL || $dim == EXTERNAL || $dim == DLVINPUT) then
+ if ($?use95) then
+  if ($?qmc) then
+   set X1 = $c95qmc_integrals
+   set X2 = $c95qmc_scf
+   set X3 = $c95qmc_properties
+   set XD = $c95qmc_direct
+   set CRYSTAL = "CRYSTAL95-QMC"
+  else
+   set X1 = $c95_integrals
+   set X2 = $c95_scf
+   set X3 = $c95_properties
+   set XD = $c95_direct
+   set CRYSTAL = "CRYSTAL95"
+  endif
+ else if ($?use98 ) then
+  if ($?qmc) then
+   set X1 = $c98qmc_integrals
+   set X2 = $c98qmc_scf
+   set X3 = $c98qmc_properties
+   set XD = $c98qmc_direct
+   set CRYSTAL = "CRYSTAL98-QMC"
+  else
+   set X1 = $c98_integrals
+   set X2 = $c98_scf
+   set X3 = $c98_properties
+   set XD = $c98_direct
+   set CRYSTAL = "CRYSTAL98"
+  endif
+ else if ($?use03) then
+  if ($?isparallel) then
+   set X1 = $pcrystal
+  else
+   set X1 = $c03_crystal
+  endif
+  set X3 = $c03_properties
+  set CRYSTAL = "CRYSTAL03"
+ else if ($?use06) then
+  if ($?isparallel) then
+   set X1 = $pcrystal
+  else
+   set X1 = $c06_crystal
+  endif
+  set X3 = $c06_properties
+  set CRYSTAL = "CRYSTAL06"
+ else if ($?use09) then
+  if ($?isparallel) then
+   set X1 = $pcrystal
+  else
+   set X1 = $c09_crystal
+  endif
+  set X3 = $c09_properties
+  set CRYSTAL = "CRYSTAL09"
+ else
+  if ($?isparallel) then
+   set X1 = $pcrystal
+  else
+   set X1 = $c14_crystal
+  endif
+  set X3 = $c14_properties
+  set CRYSTAL = "CRYSTAL23"
+ endif
+else
+ echo "The file $input_file does not appear to be a CRYSTAL95-98-03-06-09-14 input deck."
+ exit
+endif
+
+# Find the directory containing the binaries for the relevant
+# code version and size.
+
+if ( $CRYSTAL == CRYSTAL95 || $CRYSTAL == CRYSTAL95-QMC ) then
+ if ( $?small ) then
+  set BIN = $BINSMALL95
+ else if ( $?big ) then
+  set BIN = $BINBIG95
+ else if ( $?huge ) then
+  set BIN = $BINHUGE95
+ else if ( $?enormous ) then
+  set BIN = $BINENORMOUS95
+ else
+  set BIN = $BINSTD95
+ endif
+else if ( $CRYSTAL == CRYSTAL98 || $CRYSTAL == CRYSTAL98-QMC) then
+ if ( $?small ) then
+  set BIN = $BINSMALL98
+ else if ( $?big ) then
+  set BIN = $BINBIG98
+ else if ( $?huge ) then
+  set BIN = $BINHUGE98
+ else if ( $?enormous ) then
+  set BIN = $BINENORMOUS98
+ else
+  set BIN = $BINSTD98
+ endif
+else if ( $CRYSTAL == CRYSTAL03) then
+ set BIN = $BIN03
+else if ( $CRYSTAL == CRYSTAL06) then
+ set BIN = $BIN06
+else if ( $CRYSTAL == CRYSTAL09) then
+ set BIN = $BIN09
+else if ( $CRYSTAL == CRYSTAL14 || $CRYSTAL == CRYSTAL23) then
+ set BIN = $BIN14
+else
+ echo "I am not sure what version of CRYSTAL to use."
+ echo "Probably a run script bug."
+ exit
+endif
+
+# Define the size message:
+ if (! $?use03 && ! $?use06 && ! $?use09 && ! $?use14) then
+  if ( $?small ) then
+   set SIZE_MESSAGE = "Binary size : small"
+  else if ( $?big ) then
+   set SIZE_MESSAGE = "Binary size : big"
+  else if ( $?huge ) then
+   set SIZE_MESSAGE = "Binary size : huge"
+  else if ( $?enormous ) then
+   set SIZE_MESSAGE = "Binary size : enormous"
+  else
+   set SIZE_MESSAGE = "Binary size : standard"
+  endif
+ else
+  set SIZE_MESSAGE = " "
+ endif
+
+# Skip to the properties calculation if required
+
+if ($?properties) then
+ set input3 = $input_file.p3
+ set input3o = $input_file.p3o
+ if( ! -e $BIN/$X3) then
+  echo Cannot access $CRYSTAL properties binary.
+  echo Please check for executable $X3 in directory $BIN .
+  exit
+ endif
+ if !(-e $input3) then
+  echo The properties input file $input3 does not exist.
+  exit
+ endif
+ if !(-e $input_file.w) then
+  echo The wave function file $input_file.w does not exist.
+  exit
+ endif
+ if ($?direct) then
+  echo "No need to run properties calculation in direct mode"
+  exit
+ endif
+ goto props
+endif
+
+# Are we running in normal or direct SCF mode (C95/C98 only)?
+
+if ( $?direct ) then
+
+ if ($?use03 || $?use06 || $?use09 || $?use14) then
+  echo " "
+  echo "It is not necessary to use the -d flag to activate direct mode when"
+  echo "using CRYSTAL03, since direct SCF calculations are flagged using an"
+  echo "input keyword (SCFDIR) rather than through the use of a separate"
+  echo "binary as with CRYSTAL95/98."
+  echo " "
+  exit
+ else
+  if( ! -e $BIN/$XD ) then
+   echo Cannot access $CRYSTAL binaries.
+   echo Check for the $XD binary in directory $BIN.
+  endif
+ endif
+
+else
+
+ if ($?use03 || $?use06 || $?use09 || $?use14) then
+  if(! -e $BIN/$X1) then
+   echo Cannot access $CRYSTAL executable.
+   echo Check for executable $X1 in directory $BIN.
+   exit
+  endif
+ else
+  if( ! -e $BIN/$X1 || ! -e $BIN/$X2) then
+   echo Cannot access $CRYSTAL executables.
+   echo Check for executables $X1 and $X2 in directory $BIN.
+   exit
+  endif
+ endif
+
+endif
+
+# Try to stop the user trying to use input decks incompatible with the requested
+# version of the code (as far as is possible).
+
+if ( ! $?use03 && ! $?use06 && ! $?use09 && ! $?use14) then
+
+ if ($?use95) then
+  if (`grep -c 'NOSYMADA' $input_file` > 0 || `grep -c 'SMEAR' $input_file` > 0) then
+   echo "The input file appears to contain keywords introduced after CRYSTAL95."
+   exit
+  endif
+ endif
+
+ if (`grep -c 'DLVINPUT' $input_file` > 0 || `grep -c 'MAKESAED' $input_file` > 0 || `grep -c 'PRSYMDIR' $input_file` > 0 || `grep -c 'TENSOR' $input_file` > 0 || `grep -c 'PURIFY' $input_file` > 0 || `grep -c 'SLABCUT' $input_file` > 0 || `grep -c 'NOSHIFT' $input_file` > 0 || `grep -c 'REDEFINE' $input_file` > 0 || `grep -c 'SUPERCON' $input_file` > 0 || `grep -c 'USESAED' $input_file` > 0 || `grep -c 'HYDROSUB' $input_file` > 0 || `grep -c 'BOHRCR98' $input_file` > 0 || `grep -c 'BOHRANGS' $input_file` > 0 || `grep -c 'STRUCPRT' $input_file` > 0 || `grep -c 'FIELD' $input_file` > 0 || `grep -c 'OPTCOORD' $input_file` > 0 || `grep -c 'PSEUDMMD' $input_file` > 0 || `grep -c 'RADSAFE' $input_file` > 0 || `grep -c 'BATCHPNT' $input_file` > 0 || `grep -c 'LINEQUAT' $input_file` > 0 || `grep -c 'FITTING' $input_file` > 0 || `grep -c 'LGRID' $input_file` > 0 || `grep -c 'BIPOSIZE' $input_file` > 0 || `grep -c 'EXCHSIZE' $input_file` > 0 || `grep -c 'MPP' $input_file` > 0 || `grep -c 'SCFDIR' $input_file` > 0 || `grep -c 'SEMIDIR' $input_file` > 0 || `grep -c 'NOMONDIR' $input_file` > 0 || `grep -c 'NEWTON' $input_file` > 0 || `grep -c 'ANDERSON' $input_file` > 0 || `grep -c 'BROYDEN' $input_file` > 0 || `grep -c 'BETALOCK' $input_file` > 0 || `grep -c 'SAVEWF' $input_file` > 0 || `grep -c 'POSTSCF' $input_file` > 0 || `grep -c 'GRADCAL' $input_file` > 0 || `grep -c 'TOLDEE' $input_file` > 0 || `grep -c 'TOLDEP' $input_file` > 0) then
+
+  echo " "
+  echo "The input file appears to contain keywords first introduced in CRYSTAL2003."
+  echo "You are trying to run "$CRYSTAL"."
+  echo "Quitting."
+  echo " "
+  exit
+
+ endif
+
+else
+
+ if ($?use06 && $dim != MOLECULE) then
+
+  if (`grep -c 'SHRINK' $input_file` == 0) then
+   echo "CRYSTAL2006 requires the SHRINK keyword for periodic systems."
+   exit
+  endif
+
+ endif
+
+ if ($?use09 && $dim != MOLECULE) then
+
+  if (`grep -c 'SHRINK' $input_file` == 0) then
+   echo "CRYSTAL2009 requires the SHRINK keyword for periodic systems."
+   exit
+  endif
+
+ endif
+
+ if ($?use14 && $dim != MOLECULE) then
+
+  if (`grep -c 'SHRINK' $input_file` == 0) then
+   echo "CRYSTAL2014 requires the SHRINK keyword for periodic systems."
+   exit
+  endif
+
+ endif
+
+ if ($?use06 && `grep -c 'TOLSCF' $input_file` > 0) then
+  echo "Replace TOLSCF keyword with TOLDEE for CRYSTAL2006."
+ endif
+
+ if ($?use09 && `grep -c 'TOLSCF' $input_file` > 0) then
+  echo "Replace TOLSCF keyword with TOLDEE for CRYSTAL2009."
+ endif
+
+ if ($?use14 && `grep -c 'TOLSCF' $input_file` > 0) then
+  echo "Replace TOLSCF keyword with TOLDEE for CRYSTAL2014."
+ endif
+
+ if ($?use03) then
+  if (`grep -c 'POINTCHG' $input_file` > 0 || `grep -c 'OPTGEOM' $input_file` || `grep -c 'FREQCALC' $input_file` || `grep -c 'ANHARM' $input_file`) then
+
+   echo " "
+   echo "The input file appears to contain keywords first introduced in CRYSTAL2006."
+   echo "You are trying to run "$CRYSTAL"."
+   echo "Quitting."
+   echo " "
+   exit
+
+  endif
+ endif
+
+endif
+
+# Are we optimizing geometries?
+
+if (`grep -c 'OPTCOORD' $input_file` > 0 && $?use03) then
+ set optcoord
+endif
+
+# Is this a density functional or Hartree-Fock calculation?
+
+if (`grep -c 'DFT' $input_file` > 1 && ! $?use03 && ! $?use06 && ! $?use09 && ! $?use14) then
+ echo "The keyword 'DFT' appears more than once in the input file"
+ echo "(possibly in the title line?)."
+ echo "This will confuse the runcrystal script. Change it."
+ exit
+endif
+
+if (`grep -c 'DFT' $input_file` == 1) then
+ set dft
+endif
+
+if ( $?dft && ! $?use03 && ! $?use06 && ! $?use09 && ! $?use14) then
+ if ( ! -e $BIN/$X3 ) then
+  echo Cannot access $CRYSTAL properties binary $X3 in directory $BIN.
+  echo Will not be able to compute DFT energy after completion of SCF.
+  exit
+ endif
+endif
+
+# Is this an atomic calculation?
+if (`grep -c 'ATOMHF' $input_file` == 1) then
+ set atomhf
+endif
+
+# Need to add NOSYMADA keyword to CRYSTAL98 input decks when generating QMC data
+
+if ( $CRYSTAL == CRYSTAL98-QMC && `grep -c 'NOSYMADA' $input_file` == 0) then
+ set file2 = $input_file.temp
+ set line = `awk 'END{print NR}' $input_file`
+ awk 'BEGIN{ofile = "'$file2'"}\
+  {if ( NR != '$line' )\
+    {print >> ofile }\
+  else\
+   { print "NOSYMADA" >> ofile  ; print "END" >> ofile}\
+  }' $input_file
+ mv $input_file.temp $input_file
+ set added_nosymada
+endif
+
+# Sort out the scratch directories
+
+if !(-e $TMP1) then
+ mkdir $TMP1
+endif
+if !(-e $TMP2) then
+ mkdir $TMP2
+endif
+if !(-e $TMP3) then
+ mkdir $TMP3
+endif
+if !(-e $TMP4) then
+ mkdir $TMP4
+endif
+if (-e $TMPDIR1 && -o $TMPDIR1)rm -r $TMPDIR1
+mkdir $TMPDIR1
+if (-e $TMPDIR2 && -o $TMPDIR2)rm -r $TMPDIR2
+mkdir $TMPDIR2
+if (-e $TMPDIR3 && -o $TMPDIR3)rm -r $TMPDIR3
+mkdir $TMPDIR3
+if (-e $TMPDIR4 && -o $TMPDIR4)rm -r $TMPDIR4
+mkdir $TMPDIR4
+
+set external = 0
+
+# Main MULTISCF loop
+
+set x = 1
+while ($x <= $nruns)
+
+ set input_file = $argv[$x]
+
+# Prepare output file
+
+ touch $input_file.o
+ echo $CRYSTAL run on $MACHINE"." > $input_file.o
+ if (! $?use03 && ! $?use06 && ! $?use09 && ! $?use14) echo $SIZE_MESSAGE >> $input_file.o
+ echo "CRYSTAL_ARCH : "$CRYSTAL_ARCH >> $input_file.o
+ if ($?isparallel) then
+  echo "Parallel binary $pcrystal run on $ncore cores." >> $input_file.o
+ endif
+ if (! $?use03  && ! $?use06 && ! $?use09 && ! $?use14 && $?direct ) echo "Direct SCF mode." >> $input_file.o
+ if ( $?multiscf ) echo "This is run $x of a set of $nruns MULTISCF runs." >> $input_file.o
+ echo Date: $DATE  >> $input_file.o
+ echo " " >> $input_file.o
+ if ($?multiscf && $x > 1) then
+  echo "MULTISCF input $x" >> $input_file.o
+  echo " " >> $input_file.o
+ endif
+ cat $input_file >> $input_file.o
+
+ if ($?multiscf && $x > 1) then
+  echo " " >> $input_file.o
+  echo "Input file from integral generation run" >> $input_file.o
+  echo " " >> $input_file.o
+  if (-e $argv[1] ) then
+   cat $argv[1] >> $input_file.o
+  else
+   echo "NO LONGER AVAILABLE" >> $input_file.o
+  endif
+  echo " " >> $input_file.o
+ endif
+
+ if (! -e $TMPDIR1) mkdir $TMPDIR1
+ cd $TMPDIR1
+ ln -s $WDIR/$input_file INPUT
+ ln -s $WDIR/$input_file.o .
+ if (($?use03 || $?use06 || $?use09 || $?use14) && $?qmc && -e $WDIR/$input_file.qmc) mv -f $WDIR/$input_file.qmc .
+ if ($?use06 && $?qmc && -e $WDIR/crysgen.dat) mv -f $WDIR/crysgen.dat .
+ if ($?use09 && $?qmc && -e $WDIR/crysgen.dat) mv -f $WDIR/crysgen.dat .
+ if ($?use14 && $?qmc && -e $WDIR/crysgen.dat) mv -f $WDIR/crysgen.dat .
+ if ($?multiscf && $x > 1) then
+  if ( -e $TMP1/SAVE_$$ ) then
+   mv $TMP1/SAVE_$$/* .
+   rm -r $TMP1/SAVE_$$ >& /dev/null
+  else
+   echo "Missing SAVE directory containing fort.xx files from previous run." >> $input_file.o
+   echo "This shouldn't happen." >> $input_file.o
+   exit
+  endif
+ endif
+
+# Link in restart file or EXTERNAL file if necessary
+
+ if (-e $WDIR/$fort20) ln -s $WDIR/$fort20 .
+ if (-e $WDIR/$fort34) then
+  ln -s $WDIR/$fort34 .
+  set external = 1
+ endif
+ if ($?optcoord) then
+  if (-e $WDIR/$input_file.hessian) ln -s $WDIR/$input_file.hessian $fort66
+  if (-e $WDIR/$input_file.restart) ln -s $WDIR/$input_file.restart $fort68
+ endif
+
+# Links for possible bielectronic integral file splitting
+
+ touch $TMPDIR2/$fort45 ; touch $TMPDIR3/$fort46 ; touch $TMPDIR4/$fort47
+ if !(-e $fort45) ln -s $TMPDIR2/$fort45 .
+ if !(-e $fort46) ln -s $TMPDIR3/$fort46 .
+ if !(-e $fort47) ln -s $TMPDIR4/$fort47 .
+
+# Run the CRYSTAL calculation
+
+ if ($?use03 || $?use06 || $?use09 || $?use14) then
+
+  nice $niceval $PARALLEL $ncore $BIN/$X1 < INPUT >>& $input_file.o
+
+  if ($?qmc) then
+
+   if ( ! -e $fort9 || -z $fort9 ) then
+    echo "Cannot create QMC wave function file." >> $input_file.o
+    echo "CRYSTAL wave function file missing at end of SCF." >> $input_file.o
+    exit
+   endif
+
+   if( ! -e $BIN/$X3) then
+    echo Cannot access $CRYSTAL properties program to calculate QMC wave function file. >> $input_file.o
+    echo Check for executable $X3 in directory $BIN . >> $input_file.o
+    exit
+   endif
+
+   echo " " >> $input_file.o
+   echo Calculation of QMC wave function file: >> $input_file.o
+   echo ====================================== >> $input_file.o
+   echo " " >> $input_file.o
+
+   if ($?use03) then
+    nice $niceval $BIN/$X3 < $input_file.qmc >>& $input_file.o
+   else
+    if (-e $input_file.qmc) then
+     echo "Running properties code with the following input:" >> $input_file.o
+     echo " " >> $input_file.o
+     cat $input_file.qmc >> $input_file.o
+    else
+     echo "Running properties code." >> $input_file.o
+    endif
+    echo " " >> $input_file.o
+    echo "The CRYSTAL CRYAPI_OUT option echoes every Gb of data it reads" >> $input_file.o
+    echo "to standard out and we can't change the source code. Output of" >> $input_file.o
+    echo "properties code is therefore suppressed." >> $input_file.o
+    nice $niceval $BIN/$X3 < $input_file.qmc >>& /dev/null
+#    nice $niceval $BIN/$X3 < $input_file.qmc >>& $input_file.o
+    echo " " >> $input_file.o
+   endif
+
+   if ($?use_03) then
+    if ($ncell == 1) then
+     if (-e gwfn.data ) then
+      if (-e $input_file.o) cat $input_file.o >> gwfn.data
+     endif
+    else
+     if (-e $input_file.o) then
+      foreach i (gwfn.data_*)
+       cat $input_file.o >> $i
+      end
+     endif
+    endif
+   endif
+
+  endif
+
+ else
+
+  if ($?direct) then
+# direct calculation
+   nice $niceval $PARALLEL $ncore $BIN/$XD < $input_file >>& $input_file.o
+  else
+# integrals calculation
+   if ($x == 1) then
+    nice $niceval $PARALLEL $ncore $BIN/$X1 < $input_file >>& $input_file.o
+   endif
+# scf calculation
+   if (-e $fort1 && -e $fort12 && -e $fort44 && -e $fort55) then
+    if ($?multiscf && $x >= 2 ) then
+     nice $niceval $PARALLEL $ncore $BIN/$X2 < $input_file >>& $input_file.o
+    else
+     nice $niceval $PARALLEL $ncore $BIN/$X2 $INPUT_REDIRECT >>& $input_file.o
+    endif
+   else
+    echo "" >> $input_file.o
+    echo "Not running SCF calculation." >> $input_file.o
+    if ($?atomhf && -e $fort9) cp $fort9 $WDIR/$input_file.w
+    if (-e $fort93) cp $fort93 $WDIR/$input_file.mol
+    if (-e $fort32) cp $fort32 $WDIR/$input_file.info
+    if (-e $fort33) cp $fort33 $WDIR/$input_file.xyz
+    if (-e $fort34 && $external == 0) cp $fort34 $WDIR/$input_file.ext
+    cd $WDIR
+    rm -r $TMPDIR1
+    if (-e $TMPDIR2) rm -r $TMPDIR2
+    if (-e $TMPDIR3) rm -r $TMPDIR3
+    if (-e $TMPDIR4) rm -r $TMPDIR4
+    exit
+   endif
+  endif
+
+# Do a DFT total energy calculation if necessay
+
+  if ( $?dft && `grep -c 'SCF ENDED - CONVERGENCE ON' $input_file.o` == 1) then
+
+   if ( ! -e $fort9 || -z $fort9 ) then
+    echo "Cannot perform DFT total energy calculation." >> $input_file.o
+    echo "Wave function file missing." >> $input_file.o
+    exit
+   endif
+
+   if( ! -e $BIN/$X3) then
+    echo Cannot access $CRYSTAL properties program to compute DFT total energy. >> $input_file.o
+    echo Check for executable $X3 in directory $BIN . >> $input_file.o
+    exit
+   endif
+
+   echo "EDFT" > $input_file.dft
+# echo "RADIAL" >> $input_file.dft
+# echo "1" >> $input_file.dft
+# echo "3.5" >> $input_file.dft
+# echo "160" >> $input_file.dft
+   echo "END" >> $input_file.dft
+   echo "END" >> $input_file.dft
+
+   echo " " >> $input_file.o
+   echo DFT total energy calculation: >> $input_file.o
+   echo " " >> $input_file.o
+
+   nice $niceval $BIN/$X3 < $input_file.dft >>& $input_file.o
+
+  endif
+
+#-----------------------------------------------------------------------
+# QMC specific stuff:
+
+# Puts all files required for generation of gwfn.data file into current root
+# scratch directory
+#
+# If we are generating a QMC file for a post-Feb2001 version of CASINO,
+# we need the eigenvalues, which requires the KNETOUT keyword to be
+# flagged in the automatically-generated properties input file.
+#
+# Note that there is a bug in most standard versions of CRYSTAL which means
+# KNETOUT flags the STOP keyword, and vice versa. To change this find
+# the CRYSTAL routine READ2 and exchange the numbers 135 and 137 in the line
+#   IF(NOMZT.EQ.NOMZ(I))GOTO(101,102,103,103,120,121,122,123,124,125,
+#   *126,127,127,128,128,129,130,131,132,133,134,136,135,137,101,138,
+#   *133),I
+#
+
+
+  if ($?qmc) then
+
+   echo 'NEWK' > $input_file.newk
+   if (`grep -c 'MOLECULE' $input_file` == 0) then
+    echo '0 0 0' >> $input_file.newk
+   endif
+   echo '1 0' >> $input_file.newk
+   if (`grep -c 'MOLECULE' $input_file` == 0) then
+    echo 'KNETOUT' >> $input_file.newk
+   endif
+   echo 'END' >> $input_file.newk
+   echo 'END' >> $input_file.newk
+   if (-e $fort9) then
+    echo "" >>& $input_file.o
+    echo "Doing eigenvector calculation for QMC calculation" >>& $input_file.o
+    echo "=================================================" >>& $input_file.o
+
+    touch $input_file.p3o
+    echo $CRYSTAL properties calculation run on $MACHINE . >> $input_file.p3o
+    echo $SIZE_MESSAGE >> $input_file.p3o
+    echo "CRYSTAL_ARCH : "$CRYSTAL_ARCH >> $input_file.p3o
+    set DATE = `date`
+    echo Date: $DATE  >> $input_file.p3o
+    echo " " >> $input_file.p3o
+    cat $input_file.newk >> $input_file.p3o
+    echo " " >> $input_file.p3o
+
+    nice $niceval $BIN/$X3 < $input_file.newk >>& $input_file.p3o
+    echo " " >> $input_file.o
+    echo "Done." >> $input_file.o
+    echo " " >> $input_file.o
+   else
+    echo "No wave function file to perform eigenvector calculation for QMC" >> $input_file.o
+   endif
+   rm -f $input_file.newk
+
+# In CRYSTAL95, the eigenvectors written on fort.10 are sorted in order
+# of increasing eigenvalue. In CRYSTAL98, the eigenvectors in fort.10
+# are not so sorted - but the eigenvectors *are* later copied, sorted, into
+# fort.8 (Obviously. Slap forehead.). Since the crystal_to_qmc converter
+# requires a sorted eigenvector list, we therefore make the following 95/98
+# distinction:
+   if ($CRYSTAL == CRYSTAL98-QMC) then
+    if (-e $fort8) mv $fort8 $TMP1/$input_file.f10
+   else if ($CRYSTAL == CRYSTAL95-QMC) then
+    if (-e $fort10) mv $fort10 $TMP1/$input_file.f10
+   else
+    echo "CRYSTAL QMC version confusion. Bug introduced."
+    exit
+   endif
+
+# common block written by FINE1
+   if (-e $fort12) mv $fort12 $TMP1/$input_file.f12
+# Sorted band/orbital energies (for metals)
+   if (-e $fort30) mv $fort30 $TMP1/$input_file.f30
+# p3 output (in case of cockups)
+   if (-e $input_file.p3o) mv $input_file.p3o $TMP1
+# SCF output (for catting onto the end of the gwfn.data file)
+   if (-e $input_file.o) cp $input_file.o $TMP1
+
+  endif
+
+ endif
+
+#-------------------------------------------------------------------------
+
+# Tidy up
+
+# Keep any output files that we might need
+# wave function
+ if (-e $fort9)  cp $fort9 $WDIR/$input_file.w
+
+if ( $?qmc && $?use03 ) then
+
+ mv -f gwfn.data* $WDIR >& /dev/null
+
+else if ( $?qmc && ($?use06 || $?use09 || $?use14) ) then
+
+ if (! -e crysgen.dat || ! -z crysgen.dat) then
+   echo "Running crysgen utility with following input to transform GRED.DAT" >> $input_file.o
+   echo "and KRED.DAT into CASINO gwfn.data file(s)." >> $input_file.o
+   echo " " >> $input_file.o
+   cat crysgen.dat >> $input_file.o
+ else
+  echo "Missing crysgen.dat file" >> $input_file.o
+  echo " " >> $input_file.o
+ endif
+ if (! -e GRED.DAT || ! -e KRED.DAT || ! -e crysgen.dat) then
+
+  if (! -e GRED.DAT) cat "GRED.DAT file missing." >> $input_file.o
+  if (! -e KRED.DAT) cat "KRED.DAT file missing." >> $input_file.o
+
+ else
+
+  if ($?use06) then
+   crysgen06 < crysgen.dat >>& $input_file.o
+  else if ($?use09) then
+   crysgen09 < crysgen.dat >>& $input_file.o
+  else
+   crysgen14 < crysgen.dat >>& $input_file.o
+  endif
+
+
+  if ($ncell == 1) then
+   if (-e gwfn.data ) then
+    if (-e $input_file.o) cat $input_file.o >> gwfn.data
+   endif
+  else
+   if (-e $input_file.o) then
+    foreach i (gwfn.data_*)
+     cat $input_file.o >> $i
+    end
+   endif
+  endif
+
+  mv -f gwfn.data* $WDIR >& /dev/null
+ endif
+
+else
+
+# KNETOUT output
+ if (-e $fort30) cp $fort30 $WDIR/$input_file.knetout
+endif
+# INFO file
+ if (-e $fort32) cp $fort32 $WDIR/$input_file.info
+# GAUSSIAN input file
+ if (-e $fort92) cp $fort92 $WDIR/$input_file.g94
+
+if ($?optcoord) then
+
+ if (-e $WDIR/geom) mv $WDIR/geom $WDIR/geom_old_$$
+ mkdir $WDIR/geom
+
+# MOLDRAW input file
+ if (-e $fort93 ) cp $fort93 $WDIR/geom/$input_file.mol
+# xyz file
+ if (-e $fort33) cp $fort33 $WDIR/geom/$input_file.xyz
+# EXTERNAL geometry file
+ if (-e $fort34 && $external == 0) cp $fort34 $WDIR/geom/$input_file.ext
+# Hessian
+ if (-e $fort66) cp $fort66 $WDIR/geom/$input_file.hessian
+# Geom restart
+ if (-e $fort68) cp $fort68 $WDIR/geom/$input_file.restart
+
+else
+
+# MOLDRAW input file
+ if (-e $fort93 ) cp $fort93 $WDIR/$input_file.mol
+# output of COORPRT
+ if (-e $fort33) cp $fort33 $WDIR/$input_file.xyz
+# EXTERNAL geometry file
+ if (-e $fort34 && $external == 0) cp $fort34 $WDIR/$input_file.ext
+
+endif
+
+# Remove the NOSYMADA keyword from CRYSTAL98-QMC input if we added it before
+ if( $CRYSTAL == CRYSTAL98-QMC)then
+  if($?added_nosymada)then
+   awk '$1 !~ /NOSYMADA/' $WDIR/$input_file > $WDIR/$input_file.temp
+   rm $WDIR/$input_file
+   mv $WDIR/$input_file.temp $WDIR/$input_file
+  endif
+ endif
+
+ if ( $?multiscf && $x < $nruns ) then
+  mkdir $TMP1/SAVE_$$
+  mv $fort1 $fort9 $fort12 $fort44 $fort55 $TMP1/SAVE_$$
+  mv $fort45 $fort46 $fort47 $TMP1/SAVE_$$
+  if (-e $fort18 ) mv $fort18 $TMP1/SAVE_$$
+  if (-e $fort56 ) mv $fort56 $TMP1/SAVE_$$
+  if (-e $fort57 ) mv $fort57 $TMP1/SAVE_$$
+  if (-e $fort58 ) mv $fort58 $TMP1/SAVE_$$
+ endif
+
+ cd $WDIR
+ rm -r $TMPDIR1
+ if ($?multiscf) then
+  if ($x == $nruns) then
+   if (-e $TMPDIR2) rm -r $TMPDIR2
+   if (-e $TMPDIR3) rm -r $TMPDIR3
+   if (-e $TMPDIR4) rm -r $TMPDIR4
+  endif
+ else
+  if (-e $TMPDIR2) rm -r $TMPDIR2
+  if (-e $TMPDIR3) rm -r $TMPDIR3
+  if (-e $TMPDIR4) rm -r $TMPDIR4
+ endif
+
+ set DATE = `date`
+ echo " " >> $input_file.o
+ echo Job completed: $DATE >> $input_file.o
+
+ @ x++
+end
+
+exit
+
+props:
+
+if ( ! $?use03 && ! $?use06 && ! $?use09 && ! $?use14) then
+
+ if (`grep -c 'PGEOMW' $input_file.p3` > 0 || `grep -c 'SPOLBP' $input_file.p3` > 0 || `grep -c 'SPOLWF' $input_file.p3` > 0 || `grep -c 'PIEZOBP' $input_file.p3` > 0 || `grep -c 'PIEZOWF' $input_file.p3` > 0 || `grep -c 'LOCALWF' $input_file.p3` > 0 || `grep -c 'DIELEC' $input_file.p3` > 0 || `grep -c 'INFOGUI' $input_file.p3` > 0) then
+
+ echo " "
+ echo "The properties input file appears to contain keywords first introduced in CRYSTAL2003."
+ echo "You are trying to run "$CRYSTAL"."
+ echo "Quitting."
+ echo " "
+ exit
+
+ endif
+
+endif
+
+touch $input3o
+if !(-e $TMP1) mkdir -p $TMP1
+mkdir -p $TMPDIR1
+cd $TMPDIR1
+
+if (`grep -c 'RDFMWF' $WDIR/$input_file.p3` > 0 ) then
+ if (-e $WDIR/$fort98) then
+  ln -s $WDIR/$fort98 $fort98
+ else
+  echo "RDFMWF flagged but no $input_file.fw file (i.e. fort.98)"
+  exit
+ endif
+endif
+
+ln -s $WDIR/$input3 .
+ln -s $WDIR/$input3o .
+if (-e $WDIR/$input_file.w) ln -s $WDIR/$input_file.w $fort9
+if (-e $WDIR/$input_file.lwf) ln -s $WDIR/$input_file.lwf $fort81
+# POLARI
+ln -s $WDIR/*.f28 $fort28 >& /dev/null
+ln -s $WDIR/*.f29 $fort29 >& /dev/null
+# PIEZOWF
+ln -s $WDIR/*.f38 $fort38 >& /dev/null
+ln -s $WDIR/*.f39 $fort39 >& /dev/null
+
+echo $CRYSTAL properties calculation run on $MACHINE"." > $input3o
+echo $SIZE_MESSAGE >> $input_file.o
+echo "CRYSTAL_ARCH : "$CRYSTAL_ARCH >> $input3o
+echo Date: $DATE  >> $input3o
+echo " " >> $input3o
+cat $input3 >> $input3o
+echo " " >> $input3o
+
+nice $niceval $BIN/$X3 < $input3 >>& $input3o
+
+if (-e $fort24) mv -f $fort24 $WDIR/$input_file.xmgr
+if (-e $fort25) mv -f $fort25 $WDIR/$input_file.in
+if (-e $fort31) mv -f $fort31 $WDIR/$input_file.ech3
+if (-e $fort32) mv -f $fort32 $WDIR/$input_file.info
+if (-e $fort33) mv -f $fort33 $WDIR/$input_file.xyz
+if (-e $fort34) mv -f $fort34 $WDIR/$input_file.ext
+if (-e $fort36) mv -f $fort36 $WDIR/$input_file.symm
+if (-e $fort80) mv -f $fort80 $WDIR/$input_file.lwf
+if (-e $fort92) mv -f $fort92 $WDIR/$input_file.g94
+if (-e $fort93) mv -f $fort93 $WDIR/$input_file.mol
+if (-e $fort98) mv -f $fort98 $WDIR/$input_file.fw
+if (-e GRED.DAT) mv -f GRED.DAT $WDIR/GRED.DAT
+if (-e KIBZ.DAT) mv -f KIBZ.DAT $WDIR/KIBZ.DAT
+if (-e KRED.DAT) mv -f KRED.DAT $WDIR/KRED.DAT
+
+cd $WDIR
+rm -r $TMPDIR1
+set DATE = `date`
+echo " " >> $input3o
+echo Job completed: $DATE >> $input3o

@@ -1,0 +1,12 @@
+Provenance / permission
+----------------------
+
+This repository contains a modified version of the "billy" basis-set and geometry
+optimisation script originally developed by Mike Towler.
+
+The original author granted explicit permission (email dated 13 Nov 2025) for
+unrestricted use, modification, and redistribution, with no acknowledgement
+required.
+
+This repository adds CRYSTAL23-first configuration and additional functionality
+used in the associated publication by Wynand Dednam. See README.md for details.

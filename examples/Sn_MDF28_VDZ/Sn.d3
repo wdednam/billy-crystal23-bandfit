@@ -1,0 +1,9 @@
+BAND
+Tin band structure
+5 4 500 5 35 1 0
+0 0 0 2 0 2  G-X
+2 0 2 2 1 3  X-W
+2 1 3 2 2 2  W-L
+2 2 2 0 0 0  L-G
+0 0 0 2 4 2  G-K-X
+END

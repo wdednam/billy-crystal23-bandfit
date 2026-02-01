@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+title: "billy-extended (CRYSTAL23)"
+message: "If you use this software, please cite the associated paper (to be added once published)."
+authors:
+  - family-names: "Dednam"
+    given-names: "Wynand"
+date-released: "2026-01-31"
+license: "TBD"

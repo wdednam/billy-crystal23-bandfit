@@ -1,0 +1,12 @@
+Note from MDT to self:
+
+* billy script doesn't appear to work in basis sets with parameters given
+  in exponential notation. Fix.
+
+To convert a number in exponential notation to ordinary notation, you
+could use:
+
+ set number = `echo $number | sed "s/+//g ; s/E/*10^/g ; s/e/*10^/g ;
+s/d/*10^/g ; s/D/*10^/g" | bc -l`
+
+(a more elegant method probably exists, but this method works.)

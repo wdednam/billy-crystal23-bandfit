@@ -1,0 +1,47 @@
+
+To install 'billy'
+==================
+
+NB: If you are using 'billy' with the CASINO distribution, all of the setup
+actions described below should be performed automatically by typing 'make'
+in the CASINO/utils directory. Except it won't read the README file. Clearly.
+
+
+(1) Set up the enclosed 'runcrystal' script by defining the environment
+    variables at the top of the script. Billy uses this script directly to run
+    CRYSTAL calculations (and so can you if you want). All environment issues
+    such as what your CRYSTAL binaries are called and where your scratch
+    directory is will be handled automatically by billy provided 'runcrystal'
+    is set up correctly..
+
+(2) In the billy/fortran directory you will find two fortran90 programs:
+    helpbilly.f90 and helpbilly2.f90
+    Compile them. Put the binaries (to be called helpbilly and helpbilly2)
+    somewhere convenient (eg. your bin directory) and define their locations
+    in the environment variable section at the top of the billy script.
+    (I define a $CRYSTAL_ARCH environment variable defining the machine
+    type and put things in ~/bin/$CRYSTAL_ARCH.)
+
+(3) Go into the /fortran/dfit_source directory. Follow the instructions in the
+    README file to make 'dfit'. Put the dfit binary somewhere in your path.
+    Again, define its location at the top of the billy script.
+
+(4) rehash
+
+(5) Read the README file.
+
+(6) That's it.
+
+Any problems: mail mdt26@cam.ac.uk
+
+
+
+
+
+NB: If billy doesn't work, it may be that the 'sort' command doesn't use the
+correct syntax for your machine e.g.:
+
+sort -n linefile -o linefile
+
+should sort 'linefile' into increasing numeric order. This doesn't happen in
+some csh dialects..

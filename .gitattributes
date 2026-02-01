@@ -1,0 +1,7 @@
+# Ensure consistent LF line endings for executable scripts
+scripts/* text eol=lf
+*.sh text eol=lf
+*.csh text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.f90 text eol=lf

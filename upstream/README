@@ -1,0 +1,135 @@
+BILLY
+=====
+
+* Billy is a script designed to optimize basis sets and simple geometries
+in CRYSTAL95/98/03/06/09/14 calculations. It does this using simple line
+minimizations. This isn't really very clever. However, it does work, and
+is intended to be a labour saving device. For very large calculations, it
+is recommended you do NOT use this script - because of its in-built
+inefficiencies. I wrote it a long time ago, OK..?
+
+* It should not be used to *develop* basis sets from scratch using atomic
+calculations. This is the work of its sister script 'atomicbilly',
+available from www.tcm.phy.cam.ac.uk/~mdt26/crystal.html . Atomicbilly
+performs a very long series of atomic calculations using the CRYSTAL
+ATOMHF option to optimize atomic basis sets including the delicate choice
+of core functions.. In calculations of crystals (for example) atomic basis
+sets should not be used unmodified but should have their outermost valence
+functions optimized (core funtions can be left alone). This is what billy
+is for.
+
+* Simply put asterisks in front of the input deck parameters (exponents,
+contraction coefficients, lattice constants, atom coordinates etc.)
+that you wish to optimize and billy will go away and optimize them.
+(Use ampersands for parameters that are constrained to be equal).
+
+Have fun,
+Mike
+mdt26 at cam.ac.uk
+
+NB: Here are the comments from the top of of the billy script
+with details of flags etc:
+NB2: See 'examples' directory for a couple of examples.
+
+##############################################################################
+#                                                                            #
+#      ######    ###   #       #       #     #                               #
+#      #     #    #    #       #        #   #                                #
+#      #     #    #    #       #         # #                                 #
+#      ######     #    #       #          #       2014                       #
+#      #     #    #    #       #          #                                  #
+#      #     #    #    #       #          #                                  #
+#      ######    ###   ####### #######    #                                  #
+#                                                                            #
+#  Dopey automatic basis set/geometry optimization using the                 #
+#  CRYSTAL95/98/03/06/09/14 software                                         #
+#                                                                            #
+#          Special edition packed with the CASINO distribution..             #
+#                                                                            #
+#  Note: this script has been superseded by 'opt_crystal' for most purposes  #
+#  though note that billy will essentially always work, whereas opt_crystal  #
+#  can very easily fail completely (in which case billy is a good backup).   #
+#  For getting a quasi-optimized basis set relatively quickly (which is      #
+#  often all you want) then billy is usually faster than opt_crystal.        #
+#                                                                            #
+#                                                                            #
+#                            Mike Towler                                     #
+#                       Cavendish Laboratory                                 #
+#                      University of Cambridge                               #
+#                            Version 5.0                                     #
+#                                                                            #
+#                              Usage:                                        #
+#   billy [-f] [-95/-98/-03/-06/-09] [-guess] [-n <nruns>] [-np <ncores>]    #
+#             <input file> <%scan range>                                     #
+#                                                                            #
+#   We implicitly assume that your run script will run CRYSTAL14 by default. #
+#                                                                            #
+#   Stick a star (*) immediately before every parameter in the CRYSTAL input #
+#   deck that you want to optimize. To optimize a set of parameters          #
+#   that are constrained to be equal to each other, precede each parameter   #
+#   in the set with an ampersand (&).                                        #
+#                                                                            #
+#   The percentage scan range specifies the amount the parameter is varied   #
+#   when hunting for minima. For multiple iteration runs ($nruns > 1) the    #
+#   scan range is halved after each iteration.                               #
+#                                                                            #
+#   It can be a good idea to use the CRYSTAL GUESSP/GUESSF options to        #
+#   speed up SCF convergence. Billy will automatically do this for you       #
+#   if you specify the -guess flag.                                          #
+#                                                                            #
+#   -f        : optimize each parameter in turn from the first to the last.  #
+#               (default behaviour is to go backwards)                       #
+#   -n <nruns>: Do the whole optimization process nruns times.               #
+#   -np <ncore>: Run in parallel on ncore cores.                             #
+#   -guess    : Turn on automatic GUESSP restarts                            #
+#   -95       : Allows you to use CRYSTAL95 executables which have different #
+#               format output files. You also need to set up the 'runcrystal'#
+#               script so that calling that with 'runcrystal -95' will point #
+#               to the relevant C95 executables.                             #
+#   -98       : Allows you to use CRYSTAL98 executables which have different #
+#               format output files. You also need to set up the 'runcrystal'#
+#               script so that calling that with 'runcrystal -98' will point #
+#               to the relevant C95 executables.                             #
+#   -03         Allows you to run CRYSTAL03 executables. You will also need  #
+#               to set up the 'runcrystal' script so that calling that with  #
+#               'runcrystal -03' will point to the relevant C03 executables. #
+#   -06         Allows you to run CRYSTAL06 executables. You will also need  #
+#               to set up the 'runcrystal' script so that calling that with  #
+#               'runcrystal -06' will point to the relevant C06 executables. #
+#   -09         Allows you to run CRYSTAL09 executables. You will also need  #
+#               to set up the 'runcrystal' script so that calling that with  #
+#               'runcrystal -09' will point to the relevant C09 executables. #
+#   -small,   : C95/C98 only - allows use of different binary sizes compiled #
+#   -big,       with different parameterized array dimensions.               #
+#   -huge,                                                                   #
+#   -enormous                                                                #
+#                                                                            #
+#   NB:  billy assumes you have my script called 'runcrystal' set up which   #
+#        runs CRYSTAL and performs all the necessary error checking.         #
+#                                                                            #
+#   NB2: billy should recognise automatically whether you are doing a HF or  #
+#        DFT calculation, and act accordingly.                               #
+#                                                                            #
+#   NB3: Other required auxiliary programs : helpbilly,helpbilly2,dfit       #
+#                                                                            #
+#   NB4: This version works on a DEC Alpha workstation and Linux PC clusters.#
+#        It should work on most other Unix workstations. If you have         #
+#        problems it is probably the syntax of the 'sort' command. If not    #
+#        mail mdt26 at cam.ac.uk .                                           #
+#                                                                            #
+# Original version:                                                          #
+# MDT University of Bristol, May 1992.                                       #
+# This updated version:                                                      #
+# MDT, Feb 1998.                                                             #
+# Minor Revisions:                                                           #
+# MDT Jun 2000.                                                              #
+# Increased robustness, C95 and C98 in same script, other minor revisions.   #
+# MDT, Jun 2002.                                                             #
+# CRYSTAL03 support.                                                         #
+# MDT, Aug 2003.                                                             #
+# CRYSTAL06 support.                                                         #
+# MDT, Sep 2008.                                                             #
+# CRYSTAL09 support.                                                         #
+# MDT, Jan 2011.                                                             #
+#                                                                            #
+##############################################################################
