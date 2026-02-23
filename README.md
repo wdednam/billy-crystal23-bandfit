@@ -46,7 +46,7 @@ source /path/to/CRYSTAL23/cry23.bashrc
 export PATH="$PWD/scripts:$PATH"
 ```
 
-3) (Optional) Build helper binaries and add them to your `PATH`:
+3) Build helper binaries and add them to your `PATH`:
 
 ```bash
 # Example (adapt to your compiler / environment)
@@ -75,10 +75,3 @@ See `docs/configuration.md`.
 - `examples/`: worked examples and sweep scripts
 - `fortran/` : helper utilities (optional but recommended)
 - `upstream/`: original upstream README files (for reference)
-
-## Releasing with your paper
-
-When you are ready to make the repository public:
-- (Optional) create a GitHub Release for that tag
-- Consider adding `CITATION.cff` once your paper DOI is known
-
