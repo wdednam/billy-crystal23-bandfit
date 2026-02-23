@@ -32,8 +32,6 @@ find scripts -type f \( -name "*.sh" -o -name "*.csh" -o -name "*.py" \) -exec c
 chmod u+x fortran/helpbilly fortran/helpbilly2 fortran/dfit/dfit
 ```
 
-
-
 1) Ensure CRYSTAL23 is configured in your environment:
 
 ```bash
@@ -75,3 +73,11 @@ See `docs/configuration.md`.
 - `examples/`: worked examples and sweep scripts
 - `fortran/` : helper utilities (optional but recommended)
 - `upstream/`: original upstream README files (for reference)
+
+## Citation
+
+If using this workflow in academic work, please cite:
+
+Dednam et al., Computational Materials Science (2026).
+
+Once a DOI is available, the CITATION.cff file will be updated.
