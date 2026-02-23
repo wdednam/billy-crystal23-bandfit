@@ -15,9 +15,6 @@ fort.*
 *.d12o
 *.d3o
 *.out
-*.log
-*.opt
-*.opt_*
 *.w
 *.p3o
 *.xmgr
