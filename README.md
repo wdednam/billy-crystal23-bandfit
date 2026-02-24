@@ -76,8 +76,16 @@ See `docs/configuration.md`.
 
 ## Citation
 
-If using this workflow in academic work, please cite:
+If you use this software in academic work, please cite the associated journal publication:
 
-Dednam et al., Computational Materials Science (2026).
+> W. Dednam, E. B. Lombardi, L. A. Zotti, C. Sabater,  
+> *Spin-orbit-coupled quantum transport with optimised Gaussian-type orbital basis sets: application to molecular junctions and topological materials*,  
+> **Computational Materials Science** (2026).  
+> https://doi.org/10.1016/j.commatsci.2026.114611  
 
-Once a DOI is available, the CITATION.cff file will be updated.
+You can also cite this repository directly via the corresponding version tag:
+
+- **Repository:** https://github.com/wdednam/billy-crystal23-bandfit  
+- **Version:** `v1.0` (release corresponding to the published manuscript)
+
+Citation metadata is available via the included `CITATION.cff` file.

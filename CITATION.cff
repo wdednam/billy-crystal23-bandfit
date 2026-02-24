@@ -1,8 +1,30 @@
 cff-version: 1.2.0
-title: "billy-extended (CRYSTAL23)"
-message: "If you use this software, please cite the associated paper (to be added once published)."
+title: "billy-extended (CRYSTAL23 band-fit optimisation workflow)"
+version: "1.0"
+doi: "10.1016/j.commatsci.2026.114611"
+date-released: 2026-02-03
 authors:
-  - family-names: "Dednam"
-    given-names: "Wynand"
-date-released: "2026-01-31"
-license: "TBD"
+  - family-names: Dednam
+    given-names: Wynand
+  - family-names: Lombardi
+    given-names: E. B.
+  - family-names: Zotti
+    given-names: Linda A.
+  - family-names: Sabater
+    given-names: Carlos
+repository-code: "https://github.com/wdednam/billy-crystal23-bandfit"
+message: "If you use this software, please cite the associated publication."
+preferred-citation:
+  type: article
+  title: "Spin-orbit-coupled quantum transport with optimised Gaussian-type orbital basis sets: application to molecular junctions and topological materials"
+  authors:
+    - family-names: Dednam
+      given-names: Wynand
+    - family-names: Lombardi
+      given-names: E. B.
+    - family-names: Zotti
+      given-names: Linda A.
+    - family-names: Sabater
+      given-names: Carlos
+  journal: "Computational Materials Science"
+  doi: "10.1016/j.commatsci.2026.114611"
