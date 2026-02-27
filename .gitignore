@@ -10,7 +10,6 @@ build/
 venv/
 
 # CRYSTAL / billy outputs
-*.f*
 fort.*
 *.d12o
 *.d3o
